@@ -69,59 +69,29 @@ export async function getLinusResponse(
   image?: string,
   history: ChatMessage[] = []
 ) {
-  const model = "gemini-3-flash-preview";
-  
-  const contents: any[] = history.map(m => ({
-    role: m.role,
-    parts: [{ text: m.text }]
-  }));
-
-  const currentParts: any[] = [{ text: message }];
-  if (image) {
-    currentParts.push({
-      inlineData: {
-        data: image.split(",")[1],
-        mimeType: "image/jpeg"
-      }
-    });
-  }
-
-  contents.push({ role: "user", parts: currentParts });
-
-  const response = await ai.models.generateContent({
-    model,
-    contents,
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      temperature: 0.7,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          text: { type: Type.STRING },
-          vocabulary: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                word: { type: Type.STRING },
-                phonetic: { type: Type.STRING },
-                meaning: { type: Type.STRING }
-              },
-              required: ["word", "phonetic", "meaning"]
-            }
-          }
-        },
-        required: ["text"]
-      }
-    },
+  // Call Grok via our server
+  const chatResponse = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messages: [
+        ...history.map(m => ({ role: m.role === "user" ? "user" : "assistant", text: m.text, image: m.image })),
+        { role: "user", text: message, image }
+      ],
+      systemInstruction: SYSTEM_INSTRUCTION
+    })
   });
 
-  const data = JSON.parse(response.text || '{"text": "I\'m sorry, I couldn\'t process that."}');
+  if (!chatResponse.ok) {
+    const error = await chatResponse.json();
+    throw new Error(error.error || "Grok API Error");
+  }
+
+  const data = await chatResponse.json();
   const text = data.text;
   const vocabulary: VocabularyWord[] = data.vocabulary || [];
   
-  // Generate Audio for the main response
+  // Generate Audio for the main response (using Gemini TTS)
   let audioBase64 = "";
   try {
     const ttsResponse = await ai.models.generateContent({
@@ -141,7 +111,7 @@ export async function getLinusResponse(
     console.error("TTS Error:", error);
   }
 
-  // Generate Audio for vocabulary words
+  // Generate Audio for vocabulary words (using Gemini TTS)
   for (const vocab of vocabulary) {
     try {
       const vocabTts = await ai.models.generateContent({
