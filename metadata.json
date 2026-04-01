@@ -1,0 +1,8 @@
+{
+  "name": "Khan Sir's AI Academy Trainer",
+  "description": "Expert Spoken English Trainer and Language Coach from Khan Sir's AI Academy.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
